@@ -32,7 +32,7 @@ func (h *AnswerHandler) List(c *gin.Context) {
 		c.Error(util.NewAppError(http.StatusBadRequest, constants.CodeBadRequest, "invalid question id"))
 		return
 	}
-	items, err := h.svc.ListByQuestion(uint(questionID))
+	items, err := h.svc.ListByQuestion(uint(questionID), middleware.GetUserID(c))
 	if err != nil {
 		c.Error(err)
 		return
@@ -80,14 +80,14 @@ func (h *AnswerHandler) Adopt(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(a))
 }
 
-// Like handles PUT /answers/:id/like.
+// Like handles PUT /answers/:id/like, toggling the current user's like.
 func (h *AnswerHandler) Like(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
 		c.Error(util.NewAppError(http.StatusBadRequest, constants.CodeBadRequest, "invalid answer id"))
 		return
 	}
-	a, err := h.svc.Like(uint(id))
+	a, err := h.svc.ToggleLike(middleware.GetUserID(c), uint(id))
 	if err != nil {
 		c.Error(err)
 		return

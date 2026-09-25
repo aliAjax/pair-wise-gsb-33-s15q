@@ -10,5 +10,6 @@ type Answer struct {
 	Content    string    `gorm:"type:text;not null" json:"content"`
 	IsBest     bool      `gorm:"default:false" json:"is_best"`
 	LikeCount  int       `gorm:"default:0" json:"like_count"`
+	LikedByMe  bool      `gorm:"-" json:"liked_by_me"`
 	CreatedAt  time.Time `json:"created_at"`
 }

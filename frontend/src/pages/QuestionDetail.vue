@@ -15,7 +15,9 @@
         </div>
         <p class="answer-content">{{ a.content }}</p>
         <div class="answer-actions">
-          <el-button size="small" @click="like(a.id)">👍 {{ a.like_count }}</el-button>
+          <el-button size="small" :type="a.liked_by_me ? 'primary' : 'default'" @click="like(a.id)">
+            👍 {{ a.liked_by_me ? '已点赞' : '点赞' }} {{ a.like_count }}
+          </el-button>
           <el-button v-if="isOwner && !a.is_best" size="small" type="warning" @click="adopt(a.id)">采纳为最佳</el-button>
         </div>
       </div>
@@ -80,8 +82,10 @@ async function like(answerId: number) {
     router.push('/login')
     return
   }
-  await likeAnswer(answerId)
-  answers.value = await listAnswers(question.value!.id)
+  const updated = await likeAnswer(answerId)
+  const idx = answers.value.findIndex((a) => a.id === answerId)
+  if (idx !== -1) answers.value[idx] = updated
+  ElMessage.success(updated.liked_by_me ? '点赞成功' : '已取消点赞')
 }
 </script>
 

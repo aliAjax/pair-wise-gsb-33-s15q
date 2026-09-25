@@ -42,11 +42,29 @@ func (s *AnswerService) Create(userID, questionID uint, content string) (*model.
 	return a, nil
 }
 
-// ListByQuestion returns answers for a question.
-func (s *AnswerService) ListByQuestion(questionID uint) ([]model.Answer, error) {
+// ListByQuestion returns answers for a question, marking which ones the user liked.
+func (s *AnswerService) ListByQuestion(questionID, userID uint) ([]model.Answer, error) {
 	items, err := s.repo.ListByQuestion(questionID)
 	if err != nil {
 		return nil, fmt.Errorf("answer list: %w", err)
+	}
+	if userID == 0 || len(items) == 0 {
+		return items, nil
+	}
+	ids := make([]uint, len(items))
+	for i, a := range items {
+		ids[i] = a.ID
+	}
+	likedIDs, err := s.repo.ListLikedAnswerIDs(userID, ids)
+	if err != nil {
+		return nil, fmt.Errorf("answer list liked: %w", err)
+	}
+	liked := make(map[uint]bool, len(likedIDs))
+	for _, id := range likedIDs {
+		liked[id] = true
+	}
+	for i := range items {
+		items[i].LikedByMe = liked[items[i].ID]
 	}
 	return items, nil
 }
@@ -93,11 +111,50 @@ func (s *AnswerService) Adopt(userID, questionID, answerID uint) (*model.Answer,
 	return a, nil
 }
 
-// Like increments the like count of an answer.
-func (s *AnswerService) Like(answerID uint) (*model.Answer, error) {
-	if err := s.repo.IncrementLike(answerID); err != nil {
-		return nil, fmt.Errorf("answer like: %w", err)
+// ToggleLike adds or removes the user's like on an answer. A repeated click
+// withdraws the support, and the unique like record keeps a concurrent double
+// click from the same user counting more than once.
+func (s *AnswerService) ToggleLike(userID, answerID uint) (*model.Answer, error) {
+	if _, err := s.repo.FindByID(answerID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, util.NewAppError(404, constants.CodeNotFound, fmt.Sprintf("Answer[id=%d] not found", answerID))
+		}
+		return nil, fmt.Errorf("answer like find: %w", err)
 	}
-	s.logger.Info(fmt.Sprintf(constants.LogAnswerLikeSuccess, answerID), "id", answerID)
-	return s.repo.FindByID(answerID)
+	liked := false
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		removed, err := s.repo.DeleteLikeTx(tx, userID, answerID)
+		if err != nil {
+			return fmt.Errorf("answer like remove: %w", err)
+		}
+		if removed {
+			return s.repo.AddLikeCountTx(tx, answerID, -1)
+		}
+		like := &model.AnswerLike{AnswerID: answerID, UserID: userID}
+		if err := s.repo.CreateLikeTx(tx, like); err != nil {
+			if errors.Is(err, repository.ErrDuplicate) {
+				// A concurrent click from the same user already recorded the
+				// support; keep exactly one like and leave the count untouched.
+				liked = true
+				return nil
+			}
+			return fmt.Errorf("answer like create: %w", err)
+		}
+		liked = true
+		return s.repo.AddLikeCountTx(tx, answerID, 1)
+	})
+	if err != nil {
+		return nil, err
+	}
+	a, err := s.repo.FindByID(answerID)
+	if err != nil {
+		return nil, fmt.Errorf("answer like reload: %w", err)
+	}
+	a.LikedByMe = liked
+	if liked {
+		s.logger.Info(fmt.Sprintf(constants.LogAnswerLikeSuccess, answerID), "user_id", userID)
+	} else {
+		s.logger.Info(fmt.Sprintf(constants.LogAnswerUnlikeSuccess, answerID), "user_id", userID)
+	}
+	return a, nil
 }

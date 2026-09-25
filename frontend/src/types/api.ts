@@ -74,5 +74,6 @@ export interface Answer {
   content: string
   is_best: boolean
   like_count: number
+  liked_by_me: boolean
   created_at: string
 }

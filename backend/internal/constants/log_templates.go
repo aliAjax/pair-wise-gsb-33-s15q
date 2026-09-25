@@ -37,6 +37,7 @@ const (
 	LogAnswerCreateSuccess      = "answer created: question_id=%d"
 	LogAnswerAdoptSuccess       = "answer adopted as best: id=%d"
 	LogAnswerLikeSuccess        = "answer liked: id=%d"
+	LogAnswerUnlikeSuccess      = "answer unliked: id=%d"
 	LogUploadSuccess            = "file upload success: path=%s"
 	LogUploadFailed             = "file upload failed: filename=%s"
 	LogRateLimited              = "request rate limited: path=%s ip=%s"
@@ -45,5 +46,5 @@ const (
 
 // LogTemplateCount returns the number of defined log templates (used by tests).
 func LogTemplateCount() int {
-	return 33
+	return 34
 }
