@@ -54,10 +54,15 @@ func (r *AnswerRepository) UpdateTx(tx *gorm.DB, a *model.Answer) error {
 	return tx.Save(a).Error
 }
 
-// IncrementLike bumps the like count of an answer.
-func (r *AnswerRepository) IncrementLike(id uint) error {
-	return r.db.Model(&model.Answer{}).Where("id = ?", id).
-		UpdateColumn("like_count", gorm.Expr("like_count + 1")).Error
+// AdjustLikeCountTx applies a delta to the like count of an answer within an
+// outer transaction. The count is floored at zero.
+func (r *AnswerRepository) AdjustLikeCountTx(tx *gorm.DB, id uint, delta int) error {
+	expr := "like_count + ?"
+	if delta < 0 {
+		expr = "GREATEST(like_count + ?, 0)"
+	}
+	return tx.Model(&model.Answer{}).Where("id = ?", id).
+		UpdateColumn("like_count", gorm.Expr(expr, delta)).Error
 }
 
 // ClearBestForQuestion resets best answers for a question.

@@ -13,17 +13,18 @@ import (
 	"github.com/gbplantwiki/gbplantwiki/internal/util"
 )
 
-// AnswerService implements answer creation, like and adoption.
+// AnswerService implements answer creation, like toggle and adoption.
 type AnswerService struct {
 	db           *gorm.DB
 	repo         *repository.AnswerRepository
+	likeRepo     *repository.AnswerLikeRepository
 	questionRepo *repository.QuestionRepository
 	logger       *slog.Logger
 }
 
 // NewAnswerService creates an AnswerService.
-func NewAnswerService(db *gorm.DB, repo *repository.AnswerRepository, questionRepo *repository.QuestionRepository, logger *slog.Logger) *AnswerService {
-	return &AnswerService{db: db, repo: repo, questionRepo: questionRepo, logger: logger}
+func NewAnswerService(db *gorm.DB, repo *repository.AnswerRepository, likeRepo *repository.AnswerLikeRepository, questionRepo *repository.QuestionRepository, logger *slog.Logger) *AnswerService {
+	return &AnswerService{db: db, repo: repo, likeRepo: likeRepo, questionRepo: questionRepo, logger: logger}
 }
 
 // Create adds an answer to a question.
@@ -42,13 +43,23 @@ func (s *AnswerService) Create(userID, questionID uint, content string) (*model.
 	return a, nil
 }
 
-// ListByQuestion returns answers for a question.
-func (s *AnswerService) ListByQuestion(questionID uint) ([]model.Answer, error) {
+// ListByQuestion returns answers for a question together with the set of
+// answer ids the given user has liked. A zero userID (anonymous) yields an
+// empty set.
+func (s *AnswerService) ListByQuestion(userID, questionID uint) ([]model.Answer, map[uint]bool, error) {
 	items, err := s.repo.ListByQuestion(questionID)
 	if err != nil {
-		return nil, fmt.Errorf("answer list: %w", err)
+		return nil, nil, fmt.Errorf("answer list: %w", err)
 	}
-	return items, nil
+	ids := make([]uint, 0, len(items))
+	for i := range items {
+		ids = append(ids, items[i].ID)
+	}
+	liked, err := s.likeRepo.LikedAnswerIDs(userID, ids)
+	if err != nil {
+		return nil, nil, fmt.Errorf("answer list liked: %w", err)
+	}
+	return items, liked, nil
 }
 
 // Adopt marks an answer as the best answer. Only the question owner may adopt.
@@ -93,11 +104,63 @@ func (s *AnswerService) Adopt(userID, questionID, answerID uint) (*model.Answer,
 	return a, nil
 }
 
-// Like increments the like count of an answer.
-func (s *AnswerService) Like(answerID uint) (*model.Answer, error) {
-	if err := s.repo.IncrementLike(answerID); err != nil {
-		return nil, fmt.Errorf("answer like: %w", err)
+// ToggleLike adds the user's support to an answer or removes it when already
+// present. The like record and the denormalized like_count are updated in one
+// transaction. The unique (user_id, answer_id) constraint makes concurrent
+// double likes idempotent: at most one record survives and the count is
+// incremented at most once. It returns the updated answer and the resulting
+// liked state.
+func (s *AnswerService) ToggleLike(userID, answerID uint) (*model.Answer, bool, error) {
+	if _, err := s.repo.FindByID(answerID); err != nil {
+		if errors.Is(err, repository.ErrNotFound) {
+			return nil, false, util.NewAppError(404, constants.CodeNotFound, fmt.Sprintf("Answer[id=%d] not found", answerID))
+		}
+		return nil, false, fmt.Errorf("answer like find: %w", err)
 	}
-	s.logger.Info(fmt.Sprintf(constants.LogAnswerLikeSuccess, answerID), "id", answerID)
-	return s.repo.FindByID(answerID)
+
+	var liked bool
+	err := s.db.Transaction(func(tx *gorm.DB) error {
+		exists, err := s.likeRepo.ExistsTx(tx, userID, answerID)
+		if err != nil {
+			return fmt.Errorf("answer like check: %w", err)
+		}
+		if !exists {
+			if err := s.likeRepo.CreateTx(tx, userID, answerID); err != nil {
+				if errors.Is(err, repository.ErrDuplicate) {
+					// A concurrent request already recorded the like; keep
+					// that single support and leave the count untouched.
+					liked = true
+					return nil
+				}
+				return fmt.Errorf("answer like create: %w", err)
+			}
+			if err := s.repo.AdjustLikeCountTx(tx, answerID, 1); err != nil {
+				return fmt.Errorf("answer like count: %w", err)
+			}
+			liked = true
+			return nil
+		}
+
+		deleted, err := s.likeRepo.DeleteTx(tx, userID, answerID)
+		if err != nil {
+			return fmt.Errorf("answer unlike delete: %w", err)
+		}
+		if deleted {
+			if err := s.repo.AdjustLikeCountTx(tx, answerID, -1); err != nil {
+				return fmt.Errorf("answer unlike count: %w", err)
+			}
+		}
+		liked = false
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+
+	a, err := s.repo.FindByID(answerID)
+	if err != nil {
+		return nil, false, fmt.Errorf("answer like reload: %w", err)
+	}
+	s.logger.Info(fmt.Sprintf(constants.LogAnswerLikeSuccess, answerID), "user_id", userID, "liked", liked)
+	return a, liked, nil
 }

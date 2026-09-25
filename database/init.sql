@@ -118,6 +118,15 @@ CREATE TABLE IF NOT EXISTS answers (
   KEY idx_answers_question (question_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE IF NOT EXISTS answer_likes (
+  id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  user_id BIGINT UNSIGNED NOT NULL,
+  answer_id BIGINT UNSIGNED NOT NULL,
+  created_at DATETIME(3) DEFAULT CURRENT_TIMESTAMP(3),
+  UNIQUE KEY uk_answer_like_user_answer (user_id, answer_id),
+  KEY idx_answer_likes_answer (answer_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 -- 种子数据
 INSERT INTO users (username, email, password_hash, nickname, bio, role) VALUES
   ('admin', 'admin@gbplantwiki.local', '$2a$10$92HNAGfeO3qr7w17GkmGaOaBDxCQ7Q73gbeQ.dGGfgnIuhpPbZH4a', '园艺管理员', '平台内容维护管理员', 'admin'),
@@ -153,5 +162,8 @@ INSERT INTO questions (user_id, title, content, images, status) VALUES
   (2, '多肉徒长了如何补救？', '冬季光照不足，多肉长高了，可以砍头吗？', JSON_ARRAY(), 'open');
 
 INSERT INTO answers (question_id, user_id, content, is_best, like_count) VALUES
-  (1, 1, '新上盆植物根系未恢复，建议先放在散射光处缓苗，见干见湿浇水，避免积水。', 0, 5),
-  (2, 1, '可以砍头繁殖，砍下的头部晾干后重新扦插，母株会萌发侧芽。', 0, 8);
+  (1, 1, '新上盆植物根系未恢复，建议先放在散射光处缓苗，见干见湿浇水，避免积水。', 0, 1),
+  (2, 1, '可以砍头繁殖，砍下的头部晾干后重新扦插，母株会萌发侧芽。', 0, 0);
+
+INSERT INTO answer_likes (user_id, answer_id) VALUES
+  (2, 1);

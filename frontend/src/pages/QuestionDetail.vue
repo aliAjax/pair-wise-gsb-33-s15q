@@ -15,7 +15,14 @@
         </div>
         <p class="answer-content">{{ a.content }}</p>
         <div class="answer-actions">
-          <el-button size="small" @click="like(a.id)">👍 {{ a.like_count }}</el-button>
+          <el-button
+            size="small"
+            :type="a.liked ? 'primary' : 'default'"
+            :loading="likingIds.has(a.id)"
+            @click="like(a)"
+          >
+            👍 {{ a.liked ? '已赞' : '点赞' }} {{ a.like_count }}
+          </el-button>
           <el-button v-if="isOwner && !a.is_best" size="small" type="warning" @click="adopt(a.id)">采纳为最佳</el-button>
         </div>
       </div>
@@ -44,14 +51,22 @@ const question = ref<Question | null>(null)
 const answers = ref<Answer[]>([])
 const reply = ref('')
 const replying = ref(false)
+// answers with a like/unlike request in flight, so concurrent clicks on the
+// same answer are coalesced into one in-flight toggle
+const likingIds = ref<Set<number>>(new Set())
 
 const isOwner = computed(() => !!user.value && question.value?.user_id === user.value.id)
 
 onMounted(async () => {
   const id = Number(route.params.id)
   question.value = await getQuestion(id)
-  answers.value = await listAnswers(id)
+  await loadAnswers(id)
 })
+
+async function loadAnswers(questionId = question.value?.id) {
+  if (!questionId) return
+  answers.value = await listAnswers(questionId)
+}
 
 async function submitReply() {
   if (!isLoggedIn.value) {
@@ -63,7 +78,7 @@ async function submitReply() {
   replying.value = true
   try {
     await createAnswer(question.value!.id, reply.value)
-    answers.value = await listAnswers(question.value!.id)
+    await loadAnswers()
     reply.value = ''
   } finally {
     replying.value = false
@@ -71,17 +86,30 @@ async function submitReply() {
 }
 async function adopt(answerId: number) {
   await adoptAnswer(question.value!.id, answerId)
-  answers.value = await listAnswers(question.value!.id)
+  await loadAnswers()
   ElMessage.success('已采纳该回答')
 }
-async function like(answerId: number) {
+async function like(a: Answer) {
   if (!isLoggedIn.value) {
-    ElMessage.warning('请先登录')
+    ElMessage.warning('请先登录后再点赞')
     router.push('/login')
     return
   }
-  await likeAnswer(answerId)
-  answers.value = await listAnswers(question.value!.id)
+  // Same answer is already being toggled: drop the duplicate click so a
+  // double-click can never produce two supports.
+  if (likingIds.value.has(a.id)) return
+  likingIds.value = new Set(likingIds.value).add(a.id)
+  try {
+    const result = await likeAnswer(a.id)
+    a.liked = result.liked
+    a.like_count = result.like_count
+  } catch {
+    // leave the UI untouched on failure; the interceptor surfaced the error
+  } finally {
+    const next = new Set(likingIds.value)
+    next.delete(a.id)
+    likingIds.value = next
+  }
 }
 </script>
 

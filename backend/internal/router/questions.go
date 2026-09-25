@@ -12,7 +12,7 @@ func registerQuestionRoutes(v1 *gin.RouterGroup, cfg *config.Config, qh *handler
 	questions := v1.Group("/questions")
 	questions.GET("", qh.List)
 	questions.GET("/:id", qh.Get)
-	questions.GET("/:id/answers", ah.List)
+	questions.GET("/:id/answers", middleware.AuthOptional(cfg), ah.List)
 	auth := questions.Group("", middleware.AuthRequired(cfg))
 	auth.POST("", limiter.Limit(), qh.Create)
 	auth.POST("/:id/answers", ah.Create)

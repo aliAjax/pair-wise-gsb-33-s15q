@@ -10,6 +10,7 @@ import (
 	"github.com/gbplantwiki/gbplantwiki/internal/constants"
 	"github.com/gbplantwiki/gbplantwiki/internal/dto"
 	"github.com/gbplantwiki/gbplantwiki/internal/middleware"
+	"github.com/gbplantwiki/gbplantwiki/internal/model"
 	"github.com/gbplantwiki/gbplantwiki/internal/service"
 	"github.com/gbplantwiki/gbplantwiki/internal/util"
 )
@@ -32,12 +33,16 @@ func (h *AnswerHandler) List(c *gin.Context) {
 		c.Error(util.NewAppError(http.StatusBadRequest, constants.CodeBadRequest, "invalid question id"))
 		return
 	}
-	items, err := h.svc.ListByQuestion(uint(questionID))
+	items, liked, err := h.svc.ListByQuestion(middleware.GetUserID(c), uint(questionID))
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK(items))
+	resp := make([]dto.AnswerResponse, 0, len(items))
+	for _, a := range items {
+		resp = append(resp, toAnswerResponse(a, liked[a.ID]))
+	}
+	c.JSON(http.StatusOK, dto.OK(resp))
 }
 
 // Create handles POST /questions/:questionId/answers.
@@ -57,7 +62,7 @@ func (h *AnswerHandler) Create(c *gin.Context) {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusCreated, dto.OK(a))
+	c.JSON(http.StatusCreated, dto.OK(toAnswerResponse(*a, false)))
 }
 
 // Adopt handles PUT /questions/:questionId/adopt.
@@ -80,17 +85,31 @@ func (h *AnswerHandler) Adopt(c *gin.Context) {
 	c.JSON(http.StatusOK, dto.OK(a))
 }
 
-// Like handles PUT /answers/:id/like.
+// Like handles PUT /answers/:id/like. It toggles the current user's support:
+// the first click records one like, clicking again withdraws it.
 func (h *AnswerHandler) Like(c *gin.Context) {
 	id, err := strconv.ParseUint(c.Param("id"), 10, 64)
 	if err != nil {
 		c.Error(util.NewAppError(http.StatusBadRequest, constants.CodeBadRequest, "invalid answer id"))
 		return
 	}
-	a, err := h.svc.Like(uint(id))
+	a, liked, err := h.svc.ToggleLike(middleware.GetUserID(c), uint(id))
 	if err != nil {
 		c.Error(err)
 		return
 	}
-	c.JSON(http.StatusOK, dto.OK(a))
+	c.JSON(http.StatusOK, dto.OK(dto.LikeResponse{LikeCount: a.LikeCount, Liked: liked}))
+}
+
+func toAnswerResponse(a model.Answer, liked bool) dto.AnswerResponse {
+	return dto.AnswerResponse{
+		ID:         a.ID,
+		QuestionID: a.QuestionID,
+		UserID:     a.UserID,
+		Content:    a.Content,
+		IsBest:     a.IsBest,
+		LikeCount:  a.LikeCount,
+		Liked:      liked,
+		CreatedAt:  a.CreatedAt,
+	}
 }

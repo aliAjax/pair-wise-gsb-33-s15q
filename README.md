@@ -154,11 +154,11 @@ gb-61/
 | DELETE | /api/v1/gardens/:id | 登录 | 移除花园条目 |
 | GET | /api/v1/questions | 公开 | 问答列表 |
 | GET | /api/v1/questions/:id | 公开 | 问题详情 |
-| GET | /api/v1/questions/:id/answers | 公开 | 问题回答列表 |
+| GET | /api/v1/questions/:id/answers | 公开（携带登录态时返回我的点赞状态） | 问题回答列表（含 like_count 与 liked） |
 | POST | /api/v1/questions | 登录（限流） | 发布问题 |
 | POST | /api/v1/questions/:id/answers | 登录 | 回答问题 |
 | PUT | /api/v1/questions/:id/adopt | 登录 | 采纳最佳回答（事务：清旧最佳+标最佳+关闭问题） |
-| PUT | /api/v1/answers/:id/like | 登录 | 回答点赞 |
+| PUT | /api/v1/answers/:id/like | 登录 | 回答点赞切换：未赞→支持（仅一次），已赞→撤销；返回 `{like_count, liked}`，并发双赞只计一次 |
 | POST | /api/v1/uploads | 登录（限流） | 上传图片 |
 
 ## 枚举出现位置清单

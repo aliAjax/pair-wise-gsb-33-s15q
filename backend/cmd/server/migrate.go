@@ -21,6 +21,7 @@ func migrate(db *gorm.DB) error {
 		&model.UserGarden{},
 		&model.Question{},
 		&model.Answer{},
+		&model.AnswerLike{},
 	)
 }
 
@@ -95,15 +96,23 @@ func seed(db *gorm.DB) error {
 	}
 
 	answers := []model.Answer{
-		{QuestionID: questions[0].ID, UserID: admin.ID, Content: "新上盆植物根系未恢复，建议先放在散射光处缓苗，见干见湿浇水，避免积水。", LikeCount: 5},
-		{QuestionID: questions[1].ID, UserID: admin.ID, Content: "可以砍头繁殖，砍下的头部晾干后重新扦插，母株会萌发侧芽。", LikeCount: 8},
+		{QuestionID: questions[0].ID, UserID: admin.ID, Content: "新上盆植物根系未恢复，建议先放在散射光处缓苗，见干见湿浇水，避免积水。", LikeCount: 1},
+		{QuestionID: questions[1].ID, UserID: admin.ID, Content: "可以砍头繁殖，砍下的头部晾干后重新扦插，母株会萌发侧芽。", LikeCount: 0},
 	}
 	if err := db.Create(&answers).Error; err != nil {
 		return err
 	}
 
+	answerLikes := []model.AnswerLike{
+		{UserID: user.ID, AnswerID: answers[0].ID},
+	}
+	if err := db.Create(&answerLikes).Error; err != nil {
+		return err
+	}
+
 	logger.Info("gbplantwiki seed data created",
 		"users", 2, "plants", len(plants), "articles", len(articles),
-		"pests", len(pests), "reminders", len(reminders), "questions", len(questions), "answers", len(answers))
+		"pests", len(pests), "reminders", len(reminders), "questions", len(questions),
+		"answers", len(answers), "answer_likes", len(answerLikes))
 	return nil
 }

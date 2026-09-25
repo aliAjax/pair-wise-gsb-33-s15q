@@ -74,5 +74,11 @@ export interface Answer {
   content: string
   is_best: boolean
   like_count: number
+  liked: boolean
   created_at: string
+}
+
+export interface AnswerLikeResult {
+  like_count: number
+  liked: boolean
 }

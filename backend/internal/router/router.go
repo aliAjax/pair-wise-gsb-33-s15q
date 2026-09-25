@@ -26,6 +26,7 @@ func Setup(cfg *config.Config, db *gorm.DB, logger *slog.Logger) *gin.Engine {
 	gardenRepo := repository.NewUserGardenRepository(db)
 	questionRepo := repository.NewQuestionRepository(db)
 	answerRepo := repository.NewAnswerRepository(db)
+	answerLikeRepo := repository.NewAnswerLikeRepository(db)
 
 	// services
 	userService := service.NewUserService(userRepo, logger, cfg)
@@ -36,7 +37,7 @@ func Setup(cfg *config.Config, db *gorm.DB, logger *slog.Logger) *gin.Engine {
 	favoriteService := service.NewFavoriteService(favoriteRepo, logger)
 	gardenService := service.NewUserGardenService(gardenRepo, logger)
 	questionService := service.NewQuestionService(questionRepo, answerRepo, userService, logger)
-	answerService := service.NewAnswerService(db, answerRepo, questionRepo, logger)
+	answerService := service.NewAnswerService(db, answerRepo, answerLikeRepo, questionRepo, logger)
 
 	// handlers
 	userHandler := handler.NewUserHandler(userService, logger)

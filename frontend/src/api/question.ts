@@ -1,5 +1,5 @@
 import request from '@/utils/request'
-import type { Question, Answer } from '@/types/api'
+import type { Question, Answer, AnswerLikeResult } from '@/types/api'
 import type { PageData } from '@/types/api'
 
 export function listQuestions(params: { page?: number; page_size?: number }) {
@@ -27,5 +27,5 @@ export function adoptAnswer(questionId: number, answerId: number) {
 }
 
 export function likeAnswer(answerId: number) {
-  return request.put<never, Answer>(`/answers/${answerId}/like`)
+  return request.put<never, AnswerLikeResult>(`/answers/${answerId}/like`)
 }
